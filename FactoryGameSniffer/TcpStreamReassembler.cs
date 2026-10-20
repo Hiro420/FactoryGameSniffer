@@ -61,15 +61,15 @@ public class TcpStreamReassembler
     {
         PacketDirection direction = (tcp.DestinationPort == _targetPort) ? PacketDirection.CS : PacketDirection.SC;
 
-        var key = new StreamKey(srcIp, tcp.SourcePort, dstIp, tcp.DestinationPort);
+        StreamKey key = new(srcIp, tcp.SourcePort, dstIp, tcp.DestinationPort);
 
-        if (!_streams.TryGetValue(key, out var stream))
+        if (!_streams.TryGetValue(key, out TcpStream? stream))
         {
             stream = new TcpStream();
             _streams[key] = stream;
         }
 
-        var payload = tcp.PayloadData ?? Array.Empty<byte>();
+        byte[] payload = tcp.PayloadData ?? Array.Empty<byte>();
 
         // Handle SYN packet (initialize stream)
         if (tcp.Synchronize)
@@ -90,7 +90,7 @@ public class TcpStreamReassembler
         if (tcp.Finished || tcp.Reset)
         {
             // Flush any remaining buffered data before cleanup
-            var flushedMessages = FlushStream(stream).ToList();
+            List<byte[]> flushedMessages = FlushStream(stream).ToList();
             _streams.Remove(key);
             return (direction, flushedMessages);
         }
@@ -115,7 +115,7 @@ public class TcpStreamReassembler
             // Check if we have buffered segments that can now be processed
             while (stream.BufferedSegments.Count > 0)
             {
-                var firstBuffered = stream.BufferedSegments.First();
+                KeyValuePair<uint, byte[]> firstBuffered = stream.BufferedSegments.First();
                 if (firstBuffered.Key == stream.NextExpectedSeq)
                 {
                     stream.ReassembledData.AddRange(firstBuffered.Value);
@@ -148,9 +148,7 @@ public class TcpStreamReassembler
     {
         while (stream.ReassembledData.Count >= 3)
         {
-            // Frame: 1 byte header length + 2-byte UNSIGNED LE body length.
-            // A signed short broke valid frames with bodies larger than 32767 bytes,
-            // permanently desynchronizing the encrypted stream.
+            // Frame: 1 byte header length + 2-byte UNSIGNED LE body length
             byte headLen = stream.ReassembledData[0];
             ushort bodyLen = (ushort)(stream.ReassembledData[1] | (stream.ReassembledData[2] << 8));
 
@@ -182,14 +180,14 @@ public class TcpStreamReassembler
     private IEnumerable<byte[]> FlushStream(TcpStream stream)
     {
         // Process any remaining buffered segments
-        foreach (var segment in stream.BufferedSegments.OrderBy(kv => kv.Key))
+        foreach (KeyValuePair<uint, byte[]> segment in stream.BufferedSegments.OrderBy(kv => kv.Key))
         {
             stream.ReassembledData.AddRange(segment.Value);
         }
         stream.BufferedSegments.Clear();
 
         // Extract any complete messages
-        foreach (var message in ExtractCompleteMessages(stream))
+        foreach (byte[]? message in ExtractCompleteMessages(stream))
         {
             yield return message;
         }
@@ -203,7 +201,7 @@ public class TcpStreamReassembler
 
     public void ClearStream(IPAddress srcIp, int srcPort, IPAddress dstIp, int dstPort)
     {
-        var key = new StreamKey(srcIp, srcPort, dstIp, dstPort);
+        StreamKey key = new(srcIp, srcPort, dstIp, dstPort);
         _streams.Remove(key);
     }
 

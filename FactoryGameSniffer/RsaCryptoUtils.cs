@@ -10,8 +10,8 @@ public static class RsaCryptoUtils
         // .NET's base64 decoder tolerates whitespace/newlines
         byte[] der = Convert.FromBase64String(privateKeyBase64);
 
-        using var ms = new MemoryStream(der, writable: false);
-        using var br = new BinaryReader(ms);
+        using MemoryStream ms = new(der, writable: false);
+        using BinaryReader br = new(ms);
 
         // Expect ASN.1 SEQUENCE (0x30) with length in short/long form (0x81/0x82)
         ReadAsn1SequenceHeader(br);
@@ -31,7 +31,7 @@ public static class RsaCryptoUtils
         byte[] dq = ReadAsn1Integer(br);
         byte[] iq = ReadAsn1Integer(br);
 
-        var rsaParams = new RSAParameters
+        RSAParameters rsaParams = new()
         {
             Modulus = n,
             Exponent = e,
